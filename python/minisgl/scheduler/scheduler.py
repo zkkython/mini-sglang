@@ -163,7 +163,8 @@ class Scheduler(SchedulerIOMixin):
         )
 
     def _schedule_next_batch(self) -> ForwardInput | None:
-        # TODO: support other policies: e.g. DECODE first
+        # TODO: support other policies: e.g. DECODE first，当前的策略是prefill优先，decode紧随其后，如果没有prefill和decode任务了才会空闲等待。未来可以支持decode优先，或者两者交替等策略。
+        # 如果prefill填充不满的话，下次循环就会尝试把decode的任务也安排上，这样可以进一步提升GPU利用率，尤其是在prefill任务较少的情况下。
         batch = (
             self.prefill_manager.schedule_next_batch(self.prefill_budget)
             or self.decode_manager.schedule_next_batch()
