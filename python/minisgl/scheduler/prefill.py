@@ -143,7 +143,7 @@ class PrefillManager:
                     chunked_list.append(pending_req)
                 reqs.append(req)
             else:
-                break  # We cannot add more requests
+                break  # We cannot add more requests, 多的请求等下一批继续
         if len(reqs) == 0:
             return None
         self.pending_list = chunked_list + self.pending_list[len(reqs) :]

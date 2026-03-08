@@ -36,13 +36,14 @@ class CacheManager:
     def unlock(self, handle: BaseCacheHandle) -> None:
         self.manager.lock_handle(handle, unlock=True)
 
+    # The allocate function tries to allocate the needed_len from the free slots first. If there are not enough free slots, it evicts some entries from the cache manager to free up space.
     def allocate(self, needed_len: int) -> torch.Tensor:
         if needed_len <= (free_len := len(self._free_slots)):
             allocated = self._free_slots[:needed_len]
             self._free_slots = self._free_slots[needed_len:]
             return allocated
 
-        # NOTE: len(evicted) + free_len >= needed_len
+        # NOTE: len(evicted) + free_len >= needed_len  看是否能从cache manager中evict出足够的空间来满足分配需求
         evicted = self.manager.evict(needed_len - free_len)
         merged = torch.cat([self._free_slots, evicted])
         assert len(merged) >= needed_len, "Eviction did not free enough space."

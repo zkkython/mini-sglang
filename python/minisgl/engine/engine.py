@@ -63,6 +63,10 @@ class Engine:
         )
         # NOTE: make page table 128 aligned (32 * sizeof(int32) == 128 bytes)
         self.max_seq_len = _align_up_32(min(config.max_seq_len, self.num_pages))
+        #  NOTE: we use int32 for page table, so the max_seq_len cannot exceed 2^31 - 1, which is very unlikely to happen.
+        #  页表的每一行对应一个请求，每一列对应一个token位置，表中的值表示该位置的token对应的KV cache中的页号。由于页表使用int32存储，所以max_seq_len不能超过2^31 - 1，这个限制在实际应用中几乎不可能达到。
+        #  之所以行数是max_running_req + 1，是因为我们需要为dummy request保留一行，dummy request用于在CUDA graph中占位，确保图的输入输出维度固定。
+        #  得到的是一个二维张量，行数是最大并发请求数加一（用于dummy request），列数是最大序列长度，每个元素是一个int32，表示对应位置的token在KV cache中的页号。
         self.page_table = create_page_table(  # + 1 for dummy request
             (config.max_running_req + 1, self.max_seq_len),
             device=self.device,
@@ -149,7 +153,7 @@ class Engine:
                 k: v.to(self.dtype)
                 for k, v in load_hf_weight(config.model_path, self.device).items()
             }
-
+    # 计算KV cache需要的页数。首先通过_sync_get_memory获取当前的可用内存，然后根据模型配置计算每页缓存所需的内存大小。接着根据配置中的memory_ratio参数计算可用于KV cache的内存，并除以每页缓存的内存大小得到需要的页数。如果配置中指定了num_page_override，则直接使用该值作为页数。最后，日志记录分配的页数和对应的内存大小。
     def _determine_num_pages(self, old_free_memory: int, config: EngineConfig) -> int:
         new_free_memory = self._sync_get_memory()[1]
         cache_per_page = (
@@ -202,7 +206,7 @@ class Engine:
 
         for req in batch.reqs:
             req.complete_one()
-
+        # logits[: batch.size] 获取当前这批次请求的输出logits(batch_size, vocab_size)，传入采样器得到下一步的token(batch_size,)，然后将结果从GPU复制到CPU，并创建一个CUDA事件来标记复制完成的时间点，以便后续操作可以等待这个事件确保数据已经准备好。
         next_tokens_gpu = self.sampler.sample(logits[: batch.size], args).to(torch.int32)
         next_tokens_cpu = next_tokens_gpu.to("cpu", non_blocking=True)
         copy_done_event = torch.cuda.Event()

@@ -58,9 +58,13 @@ class Scheduler(SchedulerIOMixin):
         torch.cuda.set_stream(self.stream)
 
         # initialize other managers
+        # TableManager PageTable管理器，负责分配和回收页表的行（即请求的槽位），以及提供对页表的访问接口。它确保每个请求都有一个唯一的槽位，并在请求完成后释放该槽位以供其他请求使用。
         self.table_manager = TableManager(config.max_running_req, self.engine.page_table)
+        # CacheManager 缓存管理器，负责管理KV cache的页分配和回收，以及提供匹配请求和缓存结果的接口。它确保KV cache的高效利用，并在请求完成后将其占用的页释放回可用池。
         self.cache_manager = CacheManager(self.device, self.engine.num_pages, config.cache_type)
+        # DecodeManager 解码管理器，负责管理正在解码的请求，包括跟踪它们的状态、分配解码资源，以及在请求完成后清理资源。它确保解码过程的高效调度，并与TableManager和CacheManager协同工作以优化资源利用。
         self.decode_manager = DecodeManager()
+        # PrefillManager 填充管理器，负责管理预填充请求的调度和执行。它跟踪待处理的预填充请求，评估它们的资源需求，并根据当前系统状态决定何时执行它们。它与TableManager和CacheManager协同工作，以确保预填充请求的高效执行，同时优化资源利用。
         self.prefill_manager = PrefillManager(
             self.cache_manager, self.table_manager, self.decode_manager
         )

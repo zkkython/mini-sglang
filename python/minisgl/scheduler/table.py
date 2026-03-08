@@ -4,6 +4,7 @@ import torch
 class TableManager:
     def __init__(self, max_running_reqs: int, page_table: torch.Tensor) -> None:
         self._max_running_reqs = max_running_reqs
+        # 槽位，给每个请求分配槽位，槽位的数量等于最大并发请求数。当一个请求完成后，它占用的槽位会被释放，可以被新的请求使用。
         self._free_slots = list(range(max_running_reqs))
         self.page_table = page_table
         # NOTE: dummy request also use this pool to get the input ids, so we need to
